@@ -1,0 +1,144 @@
+      !#########################################################################
+      !
+      ! JONKER-VOLGENANT-CASTANON METHOD OF ASSIGNMENT PROBLEM SOLVING
+      !
+      ! VS
+      !
+      ! MACK METHOD OF ASSIGNMENT PROBLEM SOLVING
+      !
+      !
+      PROGRAM LAPJVC_VS_LAPMACK
+
+      REAL STARTTIME_CPU,ENDTIME_CPU,STARTTIME_SYSCLK,ENDTIME_SYSCLK
+      INTEGER COUNT_0,COUNT_1,COUNT_MAX,COUNT_RATE
+      INTEGER TARRAY(9)              ! TIMEARRAY
+      CHARACTER(2) CH2(3)            ! FOR OUTPUT TIME
+
+      INTEGER,PARAMETER::K=96    ! COUNT OF MARKS
+      INTEGER,PARAMETER::L=32    ! COUNT OF TRACKS
+C      INTEGER,PARAMETER::K=1    ! COUNT OF MARKS
+C      INTEGER,PARAMETER::L=2    ! COUNT OF TRACKS
+      INTEGER,PARAMETER::NORDER=(K+L) ! ORDER OF TASK
+      INTEGER,PARAMETER::NTASKS=100000 ! NUMBER OF TASKS TO SOLVE
+
+      INTEGER JV_F_RES(NORDER) ! RESULTS
+      INTEGER MACK_F_RES(NORDER) ! RESULTS
+      REAL JV_F_SUM,MACK_F_SUM! RESULTS
+      REAL,DIMENSION(NORDER,NORDER)::FASSIGNCOST ! FULL MATRIX OF ASSIGNMENTS WITH EMPTY COSTS
+      REAL,DIMENSION(K,L)::FCOST       ! MATRIX TO SOLVE
+      REAL,PARAMETER::PSI_EMPTY=-1E6   ! FILL ASSIGNCOST MATRIX WITH THIS VALUE
+      REAL,PARAMETER::RESOLUTION=1E-6  ! TWO REALS WITH DELTA LESS THEN THIS CONSIDERED TO BE EQUAL
+
+      ! START NOW !
+      PRINT *, "PROGRAM JVC_VS_MACK"
+      STARTTIME_CPU = 0.
+      ENDTIME_CPU = 0.
+      COUNT_0 = 0
+      COUNT_1 = 0
+      COUNT_RATE = 0
+      COUNT_MAX = 0
+      STARTTIME_SYSCLK = 0.
+      ENDTIME_SYSCLK = 0.
+
+      PRINT *, "JVC STARTED..."
+      CALL CPU_TIME(STARTTIME_CPU)        ! REMEMBER START TIME
+      CALL SYSTEM_CLOCK(COUNT_0, COUNT_RATE, COUNT_MAX)
+      STARTTIME_SYSCLK=COUNT_0*1.0/COUNT_RATE
+      !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      ! MAIN CYCLE:
+      IREALWORLD=0 !1 !     ! IN REAL WORLD WE HAVE TASK VERY SPARSED
+      DO ITASK=1,NTASKS
+        PRINT *, "TASK=",ITASK
+
+        IF(IREALWORLD.EQ.1)THEN
+        FASSIGNCOST=PSI_EMPTY
+        CALL RANDOM_NUMBER(FCOST)
+        ! DO CUTTING SOME PLACES TO MAKE MATRIX BE MORE LIKE OUR REAL-WORLD MATRIX
+        RLEVELCUT=0.5
+        DO I=1,K
+          DO J=1,L
+            RANDOMNUM=0
+            CALL RANDOM_NUMBER(RANDOMNUM) ! RANDOMNUM=0..1
+            IF(RANDOMNUM.GT.RLEVELCUT)THEN
+              FCOST(I,J)=PSI_EMPTY
+            ENDIF
+          ENDDO
+        ENDDO
+
+C        PRINT *, "MATRIX FCOST:"
+C        DO I=1,K
+C          DO J=1,L
+C            WRITE(*,'(1X,F7.3 $)') FCOST(I,J)
+C          ENDDO
+C          WRITE(*,'(A)') ' '
+C        ENDDO
+
+        FASSIGNCOST(1:K,1:L)=FCOST
+
+C        PRINT *, "MATRIX FASSIGNCOST:"
+C        DO I=1,NORDER
+C          DO J=1,NORDER
+C            WRITE(*,'(1X,F12.3 $)') FASSIGNCOST(I,J)
+C          ENDDO
+C          WRITE(*,'(A)') ' '
+C        ENDDO
+        ELSE
+          call random_seed
+          CALL RANDOM_NUMBER(FASSIGNCOST)
+        ENDIF
+        !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        ! FLOAT ASSIGNMENT PROBLEM
+        CALL JVC
+     *(1,NORDER,FASSIGNCOST,ABS(PSI_EMPTY),RESOLUTION,JV_F_RES,JV_F_SUM)
+
+        CALL MACK(1,NORDER,FASSIGNCOST,MACK_F_RES,MACK_F_SUM)
+        !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        ! CHECK
+        !IF(.FALSE.)THEN
+        IF(.TRUE.)THEN
+            !IF(JV_F_SUM.NE.MACK_F_SUM)THEN
+            IF(ABS(JV_F_SUM-MACK_F_SUM).GT.1E-4)THEN ! TOLERANCE FOR FLOAT
+              PRINT *, "FAILED SUM OF REAL TASK!"
+              PRINT *, "JV_F_SUM   :", JV_F_SUM
+              PRINT *, "MACK_F_SUM :", MACK_F_SUM
+              READ *
+            ENDIF
+C            IF(JV_I_SUM.NE.MACK_I_SUM)THEN
+C            PRINT *, "FAILED SUM OF INTEGER TASK!"
+C            READ *
+C          ENDIF
+C          IF(JV_I_RES(J).NE.MACK_I_RES(J))THEN
+C            PRINT *, "FAILED COMPARISON OF INTEGER TASK!"
+C            READ *
+C          ENDIF
+        ENDIF
+      ENDDO
+      !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      PRINT *, "RESULT:"
+      ! CALCULATE AND PRINT EXECUTION TIME
+      CALL CPU_TIME(ENDTIME_CPU)         ! GET END TIME
+      CALL SYSTEM_CLOCK(COUNT_1,COUNT_RATE,COUNT_MAX) ! GET END TIME
+
+      EXETIME_CPU_JVC=ENDTIME_CPU-STARTTIME_CPU          ! EXECUTION TIME
+      CALL GMTIME(INT(EXETIME_CPU_JVC), TARRAY)  ! TO GMT DIRECTLY WITHOUT ANY TIMEZONE SHIFT
+      WRITE(CH2(1),'(I2.2)') TARRAY(3)       ! HOUR
+      WRITE(CH2(2),'(I2.2)') TARRAY(2)       ! MIN
+      WRITE(CH2(3),'(I2.2)') TARRAY(1)       ! SEC
+      !WRITE(CH3,'(I3.3)') TIMEMS          ! MSEC
+      PRINT *, "EXECUTION CPU_TIME (HH:MM:SS) : "
+     * //CH2(1)//":"//CH2(2)//":"//CH2(3)
+
+      ENDTIME_SYSCLK=COUNT_1*1.0/COUNT_RATE
+      EXETIME_SYSCLK_JVC=ENDTIME_SYSCLK-STARTTIME_SYSCLK
+      CALL GMTIME(INT(EXETIME_SYSCLK_JVC), TARRAY)  ! TO GMT DIRECTLY WITHOUT ANY TIMEZONE SHIFT
+      WRITE(CH2(1),'(I2.2)') TARRAY(3)       ! HOUR
+      WRITE(CH2(2),'(I2.2)') TARRAY(2)       ! MIN
+      WRITE(CH2(3),'(I2.2)') TARRAY(1)       ! SEC
+      !WRITE(CH3,'(I3.3)') TIMEMS          ! MSEC
+      PRINT *, "EXECUTION SYSTEM_CLOCK TIME (HH:MM:SS) : "
+     * //CH2(1)//":"//CH2(2)//":"//CH2(3)
+
+      !#########################################################################
+      PRINT *, "PRESS 'ENTER' TO EXIT PROGRAM..."
+      READ * ! WAIT FOR 'ENTER' TO BE PRESSED AND EXIT PROGRAM
+      END PROGRAM
